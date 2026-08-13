@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/themayursinha/authority-graph-simulator/authoritygraph"
@@ -180,5 +181,77 @@ func TestRunAllowLegitimateGoldenFixture(t *testing.T) {
 	}
 	if out != string(expected) {
 		t.Fatalf("stdout mismatch:\n--- got ---\n%s\n--- want ---\n%s", out, expected)
+	}
+}
+
+// TestRunRejectsStrictShapeViolations proves the request decoder is strict
+// about more than unknown fields: duplicate keys, case-variant field names,
+// null collections/required fields, null array elements, unknown nested
+// fields, and type mismatches are all process errors with no partial receipt.
+func TestRunRejectsStrictShapeViolations(t *testing.T) {
+	valid := validRequestJSON()
+	proposedActionBlock := `"proposed_action": {
+    "type": "mcp_capability_delegation",
+    "from": "agent-a",
+    "to": "agent-b",
+    "capability": "mcp:payments:refund"
+  },`
+	cases := []struct {
+		name   string
+		mutate func() string
+	}{
+		{"duplicate top-level key", func() string {
+			return strings.Replace(valid, `"direct_operation_authorized": true
+}`, `"direct_operation_authorized": true,
+  "principals": ["agent-a"]
+}`, 1)
+		}},
+		{"case-variant field name", func() string {
+			return strings.Replace(valid, `"direct_operation_authorized": true`, `"DIRECT_OPERATION_AUTHORIZED": true`, 1)
+		}},
+		{"null slice field", func() string {
+			return strings.Replace(valid, `"delegations": []`, `"delegations": null`, 1)
+		}},
+		{"null principals collection", func() string {
+			return strings.Replace(valid, `"principals": ["agent-a", "agent-b"],`, `"principals": null,`, 1)
+		}},
+		{"null element in array", func() string {
+			return strings.Replace(valid, `"principals": ["agent-a", "agent-b"],`, `"principals": ["agent-a", null],`, 1)
+		}},
+		{"null nested required field", func() string {
+			return strings.Replace(valid, `"type": "mcp_capability_delegation"`, `"type": null`, 1)
+		}},
+		{"null proposed action", func() string {
+			return strings.Replace(valid, proposedActionBlock, `"proposed_action": null,`, 1)
+		}},
+		{"unknown nested field", func() string {
+			return strings.Replace(valid, `"to": "agent-b",`, `"to": "agent-b",
+    "surprise": 1,`, 1)
+		}},
+		{"duplicate nested key", func() string {
+			return strings.Replace(valid, `    "capability": "mcp:payments:refund"
+  },`, `    "capability": "mcp:payments:refund",
+    "capability": "mcp:payments:refund"
+  },`, 1)
+		}},
+		{"duplicate key in grant element", func() string {
+			return strings.Replace(valid, `{"principal": "agent-a", "capability": "mcp:payments:refund"}`, `{"principal": "agent-a", "principal": "agent-a", "capability": "mcp:payments:refund"}`, 1)
+		}},
+		{"type mismatch bool field", func() string {
+			return strings.Replace(valid, `"direct_operation_authorized": true`, `"direct_operation_authorized": "yes"`, 1)
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeTemp(t, tc.mutate())
+			out, err := runArgs(t, path)
+			if err == nil {
+				t.Fatal("expected error for strict shape violation")
+			}
+			if out != "" {
+				t.Fatalf("partial receipt on stdout: %q", out)
+			}
+		})
 	}
 }

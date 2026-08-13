@@ -24,6 +24,12 @@ violations `Reach(G_after) \ Mandate` plus the authority delta
 - Unknown principals, unknown capabilities, unknown or missing action types,
   and empty identifiers deny with stable reason codes and no fabricated
   authority result.
+- Validation failures follow a fixed reason-code precedence independent of
+  declaration order: `unknown_principal` > `unknown_capability` >
+  `unknown_action_type` > `invalid_request`. Reordering grants, delegations,
+  or mandate declarations never flips the emitted reason code. Missing or
+  empty principal/capability collections are reported as `invalid_request`
+  before any reference check.
 - The proposed grantor must hold the delegated capability in `Reach(G_before)`;
   otherwise deny with reason code `grantor_lacks_capability`.
 - Duplicate declarations and duplicate grants/edges are normalized as sets;
@@ -31,8 +37,9 @@ violations `Reach(G_after) \ Mandate` plus the authority delta
 - Receipts are deterministic: all authority-pair arrays are sorted
   lexicographically by principal then capability; identical declarations in
   different order produce byte-identical encoded receipts.
-- Malformed request JSON (syntax error, unknown field, trailing JSON) is a
-  process error: non-zero exit and no partial JSON receipt on stdout.
+- Malformed request JSON (syntax error, unknown field, duplicate key,
+  case-variant field name, null collection or required field, trailing JSON)
+  is a process error: non-zero exit and no partial JSON receipt on stdout.
 
 ## Required reason codes
 
