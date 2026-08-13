@@ -1,0 +1,52 @@
+{
+  "task_id": "T-AUTHORITY-GRAPH-001-mcp-delegation",
+  "invariant_ids": ["AG1", "AG2", "AG3", "AG4"],
+  "security_sensitive": true,
+  "security_problem": "A single MCP capability delegation call can be individually authorized while it activates authority for another principal or a transitive chain of principals outside the originating mandate. Every individual call can be credential-valid and policy-allowed while the system-wide authority graph still expands illegitimately.",
+  "required_behavior": "Evaluate one proposed mcp_capability_delegation(grantor, grantee, capability) edge against the declared graph: ALLOW iff DirectOperationAuthorized AND Reach(G_after) is a subset of Mandate, with Reach(G_before) subset of Mandate enforced as a fail-closed precondition. Unknown principals/capabilities/action types, empty identifiers, and grantors lacking the delegated capability deny with stable reason codes and no fabricated authority result. Every receipt is deterministic with lexicographically sorted authority-pair arrays.",
+  "failure_behavior": "Fail closed: invalid baseline, unknown references, malformed action type, or grantor without capability produce a deny receipt with a stable reason code and no fabricated authority result; unreadable or malformed request JSON exits non-zero with no partial JSON receipt on stdout.",
+  "allowed_paths": [
+    ".gitignore",
+    "LICENSE",
+    "README.md",
+    "go.mod",
+    "authoritygraph/model.go",
+    "authoritygraph/evaluate.go",
+    "authoritygraph/receipt.go",
+    "authoritygraph/evaluate_test.go",
+    "cmd/authority-graph-simulator/main.go",
+    "cmd/authority-graph-simulator/main_test.go",
+    "testdata/deny-transitive.json",
+    "testdata/deny-transitive.expected.json",
+    "testdata/allow-legitimate.json",
+    "testdata/allow-legitimate.expected.json",
+    "harness/project-contract.md",
+    "harness/invariants.md",
+    "harness/check.sh",
+    "harness/tasks/T-AUTHORITY-GRAPH-001-mcp-delegation.json"
+  ],
+  "approval_gated_paths": [],
+  "max_attempts": 3,
+  "required_commands": [
+    {
+      "name": "red_test",
+      "expect": "fail",
+      "argv": ["go", "test", "./authoritygraph", "-run", "^TestEvaluate(DeniesDirectAuthorityAmplification|AllowsMandatedDelegation|DeniesTransitiveActivation)$", "-count=1"]
+    },
+    {
+      "name": "target_test",
+      "expect": "pass",
+      "argv": ["go", "test", "./authoritygraph", "./cmd/authority-graph-simulator", "-count=1"]
+    },
+    {
+      "name": "race_test",
+      "expect": "pass",
+      "argv": ["go", "test", "-race", "./...", "-count=1"]
+    },
+    {
+      "name": "harness",
+      "expect": "pass",
+      "argv": ["harness/check.sh"]
+    }
+  ]
+}

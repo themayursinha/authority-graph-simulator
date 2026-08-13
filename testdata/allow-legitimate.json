@@ -1,0 +1,22 @@
+{
+  "principals": ["agent-a", "agent-b", "agent-c"],
+  "capabilities": ["mcp:payments:refund"],
+  "direct_grants": [
+    {"principal": "agent-a", "capability": "mcp:payments:refund"}
+  ],
+  "delegations": [
+    {"from": "agent-b", "to": "agent-c", "capability": "mcp:payments:refund"}
+  ],
+  "mandate": [
+    {"principal": "agent-a", "capability": "mcp:payments:refund"},
+    {"principal": "agent-b", "capability": "mcp:payments:refund"},
+    {"principal": "agent-c", "capability": "mcp:payments:refund"}
+  ],
+  "proposed_action": {
+    "type": "mcp_capability_delegation",
+    "from": "agent-a",
+    "to": "agent-b",
+    "capability": "mcp:payments:refund"
+  },
+  "direct_operation_authorized": true
+}

@@ -1,0 +1,41 @@
+{
+  "decision": "allow",
+  "reason_code": "within_mandate",
+  "action_type": "mcp_capability_delegation",
+  "direct_operation_authorized": true,
+  "authority_before": [
+    {
+      "principal": "agent-a",
+      "capability": "mcp:payments:refund"
+    }
+  ],
+  "authority_after": [
+    {
+      "principal": "agent-a",
+      "capability": "mcp:payments:refund"
+    },
+    {
+      "principal": "agent-b",
+      "capability": "mcp:payments:refund"
+    },
+    {
+      "principal": "agent-c",
+      "capability": "mcp:payments:refund"
+    }
+  ],
+  "authority_delta": [
+    {
+      "principal": "agent-b",
+      "capability": "mcp:payments:refund"
+    },
+    {
+      "principal": "agent-c",
+      "capability": "mcp:payments:refund"
+    }
+  ],
+  "violations": [],
+  "proof": {
+    "property": "reachable_authority_after_subset_of_mandate",
+    "valid": true
+  }
+}
