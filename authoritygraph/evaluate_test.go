@@ -373,3 +373,152 @@ func TestEvaluateDeniesTransitiveActivation(t *testing.T) {
 		t.Fatal("Proof.Valid = true, want false")
 	}
 }
+
+// TestEvaluateValidationPrecedenceIsOrderIndependent proves invalid-request
+// receipts are byte-stable: reordering two invalid direct grants cannot flip
+// the reason code between unknown_principal and unknown_capability.
+func TestEvaluateValidationPrecedenceIsOrderIndependent(t *testing.T) {
+	build := func(grants []CapabilityPair) Request {
+		return Request{
+			Principals:   []string{"agent-a", "agent-b"},
+			Capabilities: []string{"mcp:payments:refund"},
+			DirectGrants: grants,
+			Mandate:      []CapabilityPair{mustPair("agent-a", "mcp:payments:refund")},
+			ProposedAction: ProposedAction{
+				Type:       ActionTypeMCPCapabilityDelegation,
+				From:       "agent-a",
+				To:         "agent-b",
+				Capability: "mcp:payments:refund",
+			},
+			DirectOperationAuthorized: true,
+		}
+	}
+
+	badPrincipal := mustPair("agent-ghost", "mcp:payments:refund")
+	badCapability := mustPair("agent-a", "mcp:unknown:cap")
+
+	ra := Evaluate(build([]CapabilityPair{badPrincipal, badCapability}))
+	rb := Evaluate(build([]CapabilityPair{badCapability, badPrincipal}))
+
+	if ra.ReasonCode != "unknown_principal" {
+		t.Fatalf("ReasonCode = %q, want %q", ra.ReasonCode, "unknown_principal")
+	}
+	if rb.ReasonCode != ra.ReasonCode {
+		t.Fatalf("reordered grants changed reason code: got %q, want %q", rb.ReasonCode, ra.ReasonCode)
+	}
+	ea, err := ra.Encode()
+	if err != nil {
+		t.Fatalf("Encode(a): %v", err)
+	}
+	eb, err := rb.Encode()
+	if err != nil {
+		t.Fatalf("Encode(b): %v", err)
+	}
+	if string(ea) != string(eb) {
+		t.Fatalf("receipts differ for reordered invalid grants:\nA: %s\nB: %s", ea, eb)
+	}
+}
+
+// TestEvaluateValidationReasonPrecedence proves the deterministic reason-code
+// precedence (unknown_principal > unknown_capability > invalid_request) holds
+// over mixed declarations and is independent of declaration order.
+func TestEvaluateValidationReasonPrecedence(t *testing.T) {
+	base := Request{
+		Principals:   []string{"agent-a", "agent-b"},
+		Capabilities: []string{"mcp:payments:refund"},
+		Mandate:      []CapabilityPair{mustPair("agent-a", "mcp:payments:refund")},
+		ProposedAction: ProposedAction{
+			Type:       ActionTypeMCPCapabilityDelegation,
+			From:       "agent-a",
+			To:         "agent-b",
+			Capability: "mcp:payments:refund",
+		},
+		DirectOperationAuthorized: true,
+	}
+	build := func(grants []CapabilityPair, delegations []DelegationEdge) Request {
+		r := base
+		r.DirectGrants = grants
+		r.Delegations = delegations
+		return r
+	}
+	reversePairs := func(pairs []CapabilityPair) []CapabilityPair {
+		out := make([]CapabilityPair, len(pairs))
+		for i := range pairs {
+			out[i] = pairs[len(pairs)-1-i]
+		}
+		return out
+	}
+	reverseEdges := func(edges []DelegationEdge) []DelegationEdge {
+		out := make([]DelegationEdge, len(edges))
+		for i := range edges {
+			out[i] = edges[len(edges)-1-i]
+		}
+		return out
+	}
+
+	cases := []struct {
+		name        string
+		grants      []CapabilityPair
+		delegations []DelegationEdge
+		want        string
+	}{
+		{
+			name: "unknown_principal beats unknown_capability",
+			grants: []CapabilityPair{
+				mustPair("agent-ghost", "mcp:payments:refund"),
+				mustPair("agent-a", "mcp:unknown:cap"),
+			},
+			want: "unknown_principal",
+		},
+		{
+			name: "unknown_capability beats invalid_request",
+			grants: []CapabilityPair{
+				mustPair("agent-a", ""),
+				mustPair("agent-a", "mcp:unknown:cap"),
+			},
+			want: "unknown_capability",
+		},
+		{
+			name: "unknown_principal beats invalid_request",
+			grants: []CapabilityPair{
+				mustPair("", "mcp:payments:refund"),
+				mustPair("agent-ghost", "mcp:payments:refund"),
+			},
+			want: "unknown_principal",
+		},
+		{
+			name: "unknown_principal beats unknown_capability across sections",
+			grants: []CapabilityPair{
+				mustPair("agent-a", "mcp:unknown:cap"),
+			},
+			delegations: []DelegationEdge{
+				{From: "agent-ghost", To: "agent-b", Capability: "mcp:payments:refund"},
+			},
+			want: "unknown_principal",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := Evaluate(build(tc.grants, tc.delegations))
+			b := Evaluate(build(reversePairs(tc.grants), reverseEdges(tc.delegations)))
+			if a.ReasonCode != tc.want {
+				t.Fatalf("ReasonCode = %q, want %q", a.ReasonCode, tc.want)
+			}
+			if b.ReasonCode != a.ReasonCode {
+				t.Fatalf("reordered declarations changed reason code: got %q, want %q", b.ReasonCode, a.ReasonCode)
+			}
+			ea, err := a.Encode()
+			if err != nil {
+				t.Fatalf("Encode(a): %v", err)
+			}
+			eb, err := b.Encode()
+			if err != nil {
+				t.Fatalf("Encode(b): %v", err)
+			}
+			if string(ea) != string(eb) {
+				t.Fatalf("receipts differ for reordered declarations:\nA: %s\nB: %s", ea, eb)
+			}
+		})
+	}
+}

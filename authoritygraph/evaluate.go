@@ -66,68 +66,110 @@ func newReceipt(req Request) Receipt {
 	}
 }
 
-// validate checks that every declared and proposed identifier is present,
-// non-empty, and declared. It returns a stable deny reason code and ok=false
-// on the first violation.
+// validate checks every declared and proposed identifier. Reason codes follow
+// a fixed precedence independent of declaration order — unknown_principal >
+// unknown_capability > unknown_action_type > invalid_request — so reordering
+// grants, delegations, or mandate declarations can never flip the receipt's
+// reason_code. Missing or empty principal/capability collections are
+// order-independent structural preconditions reported as invalid_request
+// before any reference check.
 func validate(req Request) (string, bool) {
 	if len(req.Principals) == 0 || len(req.Capabilities) == 0 {
 		return "invalid_request", false
 	}
-	principals := stringSet(req.Principals)
-	capabilities := stringSet(req.Capabilities)
 	if containsEmpty(req.Principals) || containsEmpty(req.Capabilities) {
 		return "invalid_request", false
 	}
+	principals := stringSet(req.Principals)
+	capabilities := stringSet(req.Capabilities)
+
+	reason := ""
 	for _, g := range req.DirectGrants {
-		if g.Principal == "" || g.Capability == "" {
-			return "invalid_request", false
-		}
-		if !hasString(principals, g.Principal) {
-			return "unknown_principal", false
-		}
-		if !hasString(capabilities, g.Capability) {
-			return "unknown_capability", false
-		}
+		reason = worst(reason, pairReason(principals, capabilities, g))
 	}
 	for _, e := range req.Delegations {
-		if e.From == "" || e.To == "" || e.Capability == "" {
-			return "invalid_request", false
-		}
-		if !hasString(principals, e.From) || !hasString(principals, e.To) {
-			return "unknown_principal", false
-		}
-		if !hasString(capabilities, e.Capability) {
-			return "unknown_capability", false
-		}
+		reason = worst(reason, edgeReason(principals, capabilities, e))
 	}
 	for _, m := range req.Mandate {
-		if m.Principal == "" || m.Capability == "" {
-			return "invalid_request", false
-		}
-		if !hasString(principals, m.Principal) {
-			return "unknown_principal", false
-		}
-		if !hasString(capabilities, m.Capability) {
-			return "unknown_capability", false
-		}
+		reason = worst(reason, pairReason(principals, capabilities, m))
 	}
-	pa := req.ProposedAction
-	if pa.Type == "" {
-		return "invalid_request", false
-	}
-	if pa.Type != ActionTypeMCPCapabilityDelegation {
-		return "unknown_action_type", false
-	}
-	if pa.From == "" || pa.To == "" || pa.Capability == "" {
-		return "invalid_request", false
-	}
-	if !hasString(principals, pa.From) || !hasString(principals, pa.To) {
-		return "unknown_principal", false
-	}
-	if !hasString(capabilities, pa.Capability) {
-		return "unknown_capability", false
+	reason = worst(reason, actionReason(principals, capabilities, req.ProposedAction))
+	if reason != "" {
+		return reason, false
 	}
 	return "", true
+}
+
+// reasonPriority ranks validation failures so the highest-priority reason wins
+// no matter how the declarations were ordered in the request.
+func reasonPriority(reason string) int {
+	switch reason {
+	case "unknown_principal":
+		return 4
+	case "unknown_capability":
+		return 3
+	case "unknown_action_type":
+		return 2
+	case "invalid_request":
+		return 1
+	}
+	return 0
+}
+
+// worst returns the higher-priority of two reason codes ("" means no failure).
+func worst(a, b string) string {
+	if reasonPriority(b) > reasonPriority(a) {
+		return b
+	}
+	return a
+}
+
+// pairReason validates one principal/capability pair declaration.
+func pairReason(principals, capabilities map[string]struct{}, p CapabilityPair) string {
+	if p.Principal == "" || p.Capability == "" {
+		return "invalid_request"
+	}
+	if !hasString(principals, p.Principal) {
+		return "unknown_principal"
+	}
+	if !hasString(capabilities, p.Capability) {
+		return "unknown_capability"
+	}
+	return ""
+}
+
+// edgeReason validates one delegation edge declaration.
+func edgeReason(principals, capabilities map[string]struct{}, e DelegationEdge) string {
+	if e.From == "" || e.To == "" || e.Capability == "" {
+		return "invalid_request"
+	}
+	if !hasString(principals, e.From) || !hasString(principals, e.To) {
+		return "unknown_principal"
+	}
+	if !hasString(capabilities, e.Capability) {
+		return "unknown_capability"
+	}
+	return ""
+}
+
+// actionReason validates the proposed action.
+func actionReason(principals, capabilities map[string]struct{}, pa ProposedAction) string {
+	if pa.Type == "" {
+		return "invalid_request"
+	}
+	if pa.Type != ActionTypeMCPCapabilityDelegation {
+		return "unknown_action_type"
+	}
+	if pa.From == "" || pa.To == "" || pa.Capability == "" {
+		return "invalid_request"
+	}
+	if !hasString(principals, pa.From) || !hasString(principals, pa.To) {
+		return "unknown_principal"
+	}
+	if !hasString(capabilities, pa.Capability) {
+		return "unknown_capability"
+	}
+	return ""
 }
 
 type principalCap struct {
