@@ -124,52 +124,65 @@ func worst(a, b string) string {
 	return a
 }
 
-// pairReason validates one principal/capability pair declaration.
+// pairReason validates one principal/capability pair declaration. Each field
+// is checked independently and combined with worst so the documented
+// reason-code precedence holds within a single declaration, not just across
+// declarations. Empty fields report invalid_request and are not double-reported
+// as unknown.
 func pairReason(principals, capabilities map[string]struct{}, p CapabilityPair) string {
+	reason := ""
 	if p.Principal == "" || p.Capability == "" {
-		return "invalid_request"
+		reason = worst(reason, "invalid_request")
 	}
-	if !hasString(principals, p.Principal) {
-		return "unknown_principal"
+	if p.Principal != "" && !hasString(principals, p.Principal) {
+		reason = worst(reason, "unknown_principal")
 	}
-	if !hasString(capabilities, p.Capability) {
-		return "unknown_capability"
+	if p.Capability != "" && !hasString(capabilities, p.Capability) {
+		reason = worst(reason, "unknown_capability")
 	}
-	return ""
+	return reason
 }
 
 // edgeReason validates one delegation edge declaration.
 func edgeReason(principals, capabilities map[string]struct{}, e DelegationEdge) string {
+	reason := ""
 	if e.From == "" || e.To == "" || e.Capability == "" {
-		return "invalid_request"
+		reason = worst(reason, "invalid_request")
 	}
-	if !hasString(principals, e.From) || !hasString(principals, e.To) {
-		return "unknown_principal"
+	if e.From != "" && !hasString(principals, e.From) {
+		reason = worst(reason, "unknown_principal")
 	}
-	if !hasString(capabilities, e.Capability) {
-		return "unknown_capability"
+	if e.To != "" && !hasString(principals, e.To) {
+		reason = worst(reason, "unknown_principal")
 	}
-	return ""
+	if e.Capability != "" && !hasString(capabilities, e.Capability) {
+		reason = worst(reason, "unknown_capability")
+	}
+	return reason
 }
 
 // actionReason validates the proposed action.
 func actionReason(principals, capabilities map[string]struct{}, pa ProposedAction) string {
+	reason := ""
 	if pa.Type == "" {
-		return "invalid_request"
+		reason = worst(reason, "invalid_request")
 	}
-	if pa.Type != ActionTypeMCPCapabilityDelegation {
-		return "unknown_action_type"
+	if pa.Type != "" && pa.Type != ActionTypeMCPCapabilityDelegation {
+		reason = worst(reason, "unknown_action_type")
 	}
 	if pa.From == "" || pa.To == "" || pa.Capability == "" {
-		return "invalid_request"
+		reason = worst(reason, "invalid_request")
 	}
-	if !hasString(principals, pa.From) || !hasString(principals, pa.To) {
-		return "unknown_principal"
+	if pa.From != "" && !hasString(principals, pa.From) {
+		reason = worst(reason, "unknown_principal")
 	}
-	if !hasString(capabilities, pa.Capability) {
-		return "unknown_capability"
+	if pa.To != "" && !hasString(principals, pa.To) {
+		reason = worst(reason, "unknown_principal")
 	}
-	return ""
+	if pa.Capability != "" && !hasString(capabilities, pa.Capability) {
+		reason = worst(reason, "unknown_capability")
+	}
+	return reason
 }
 
 type principalCap struct {

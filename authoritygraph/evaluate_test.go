@@ -522,3 +522,73 @@ func TestEvaluateValidationReasonPrecedence(t *testing.T) {
 		})
 	}
 }
+
+// TestEvaluateValidationReasonPrecedenceWithinDeclaration proves the documented
+// reason-code precedence also holds within a single declaration: a record
+// carrying both an empty field and an unknown reference reports the
+// higher-priority reason instead of short-circuiting to invalid_request
+// (Codex P2, fix on 14a2db7).
+func TestEvaluateValidationReasonPrecedenceWithinDeclaration(t *testing.T) {
+	base := Request{
+		Principals:   []string{"agent-a", "agent-b"},
+		Capabilities: []string{"mcp:payments:refund"},
+		Mandate:      []CapabilityPair{mustPair("agent-a", "mcp:payments:refund")},
+		ProposedAction: ProposedAction{
+			Type:       ActionTypeMCPCapabilityDelegation,
+			From:       "agent-a",
+			To:         "agent-b",
+			Capability: "mcp:payments:refund",
+		},
+		DirectOperationAuthorized: true,
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(*Request)
+		want   string
+	}{
+		{
+			name: "empty principal plus unknown capability",
+			mutate: func(r *Request) {
+				r.DirectGrants = []CapabilityPair{mustPair("", "mcp:unknown:cap")}
+			},
+			want: "unknown_capability",
+		},
+		{
+			name: "unknown principal plus empty capability",
+			mutate: func(r *Request) {
+				r.DirectGrants = []CapabilityPair{mustPair("agent-ghost", "")}
+			},
+			want: "unknown_principal",
+		},
+		{
+			name: "empty from plus unknown to on a delegation edge",
+			mutate: func(r *Request) {
+				r.Delegations = []DelegationEdge{{From: "", To: "agent-ghost", Capability: "mcp:payments:refund"}}
+			},
+			want: "unknown_principal",
+		},
+		{
+			name: "unknown action type plus unknown grantee",
+			mutate: func(r *Request) {
+				r.ProposedAction.Type = "iam_pass_role"
+				r.ProposedAction.To = "agent-ghost"
+			},
+			want: "unknown_principal",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := base
+			tc.mutate(&req)
+			got := Evaluate(req)
+			if got.Decision != "deny" {
+				t.Fatalf("Decision = %q, want deny", got.Decision)
+			}
+			if got.ReasonCode != tc.want {
+				t.Fatalf("ReasonCode = %q, want %q", got.ReasonCode, tc.want)
+			}
+		})
+	}
+}
