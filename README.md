@@ -1,5 +1,12 @@
 # Authority Graph Simulator
 
+> **Part of the [MCP Visor Trust Plane](https://github.com/themayursinha/mcp-visor) research program.**
+> This prototype answers one half of the Trust Plane question — *what authority can be reached* —
+> alongside [Capability Delta Receipts](https://github.com/themayursinha/capability-delta-receipts),
+> which answers the other half — *what capability can an agent acquire*. The production enforcement
+> lives in **mcp-visor**; these repos are deterministic prototypes that prove the semantics before any
+> integration.
+
 Deterministic counterfactual authorization for a single authority-changing
 action: MCP capability delegation.
 
