@@ -1,11 +1,15 @@
 # Authority Graph Simulator
 
 > **Part of the [MCP Visor Trust Plane](https://github.com/themayursinha/mcp-visor) research program.**
-> This prototype answers one half of the Trust Plane question — *what authority can be reached* —
-> alongside [Capability Delta Receipts](https://github.com/themayursinha/capability-delta-receipts),
-> which answers the other half — *what capability can an agent acquire*. The production enforcement
-> lives in **mcp-visor**; these repos are deterministic prototypes that prove the semantics before any
-> integration.
+
+| Repo | Question it answers | Status |
+|---|---|---|
+| [**mcp-visor**](https://github.com/themayursinha/mcp-visor) | What may an agent *do*? (runtime policy at the MCP `tools/call` boundary) | Production |
+| [**agent-identity-plane**](https://github.com/themayursinha/agent-identity-plane) | *Who* is acting, for whom, through which chain? (identity + provenance) | v0.1.0 |
+| [**authority-graph-simulator**](https://github.com/themayursinha/authority-graph-simulator) | What authority can an agent *reach*? (counterfactual delegation analysis) | **This repo** |
+| [**capability-delta-receipts**](https://github.com/themayursinha/capability-delta-receipts) | What capability can an agent *acquire*? (trajectory-level capability accounting) | Prototype |
+
+mcp-visor is the production action boundary. Agent Identity Plane authenticates callers. This repo is a standalone declared-graph proof; it is not in the visor proxy. Capability-delta semantics also exist in visor as an opt-in evaluator.
 
 Deterministic counterfactual authorization for a single authority-changing
 action: MCP capability delegation.
